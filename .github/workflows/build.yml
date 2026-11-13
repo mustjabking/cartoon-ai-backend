@@ -138,7 +138,6 @@ jobs:
                               Request okRequest = new Request.Builder().url(request.getUrl().toString()).build();
                               Response response = client.newCall(okRequest).execute();
                               
-                              // X-Frame-Options aur CSP ko remove karna taake iframe load ho sake
                               Response modResponse = response.newBuilder()
                                       .removeHeader("x-frame-options")
                                       .removeHeader("frame-options")
@@ -189,15 +188,26 @@ jobs:
           </html>
           EOF
 
-      - name: Setup Gradle 8.2 Wrapper
+      - name: Download Gradle 8.2 Wrapper (Bypass System Gradle)
         run: |
-          # Force Gradle Wrapper to use version 8.2 to match AGP 8.1.0
-          gradle wrapper --gradle-version 8.2
-          chmod +x ./gradlew
-          # Double check the Gradle version
-          ./gradlew --version
+          mkdir -p gradle/wrapper
+          # Download Gradle 8.2 Wrapper JAR
+          curl -L -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrapper.jar
+          # Create the properties file pointing to Gradle 8.2
+          cat << 'EOF' > gradle/wrapper/gradle-wrapper.properties
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          # Download the gradlew script
+          curl -L -o gradlew https://github.com/gradle/gradle/raw/v8.2.0/gradlew
+          chmod +x gradlew
 
-      - name: Build APK
+      - name: Build APK with Gradle 8.2
         run: |
           ./gradlew assembleDebug
 
