@@ -1,4 +1,5 @@
-name: Build APK
+# Created by Muhammad Taqi
+name: Build DuckAI APK
 
 on:
   push:
@@ -10,24 +11,189 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Create Project Directories
+        run: |
+          mkdir -p app/src/main/java/com/example/duckai
+          mkdir -p app/src/main/assets
+
+      - name: Generate settings.gradle
+        run: |
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "DuckAI"
+          include ':app'
+          EOF
+
+      - name: Generate build.gradle (Root)
+        run: |
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.1.0' apply false
+          }
+          EOF
+
+      - name: Generate app/build.gradle
+        run: |
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.example.duckai'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.example.duckai"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+          }
+          EOF
+
+      - name: Generate AndroidManifest.xml
+        run: |
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="true"
+                  android:label="DuckAI"
+                  android:theme="@android:style/Theme.NoTitleBar">
+                  <activity android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Generate MainActivity.java (Header Bypass Logic)
+        run: |
+          cat << 'EOF' > app/src/main/java/com/example/duckai/MainActivity.java
+          package com.example.duckai;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
+          import java.util.HashMap;
+          import java.util.Map;
+          import okhttp3.OkHttpClient;
+          import okhttp3.Request;
+          import okhttp3.Response;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  WebView webView = new WebView(this);
+                  setContentView(webView);
+                  
+                  webView.getSettings().setJavaScriptEnabled(true);
+                  webView.getSettings().setDomStorageEnabled(true);
+                  
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                          try {
+                              OkHttpClient client = new OkHttpClient();
+                              Request okRequest = new Request.Builder().url(request.getUrl().toString()).build();
+                              Response response = client.newCall(okRequest).execute();
+                              
+                              // X-Frame-Options ko remove karna taake iframe chale
+                              Response modResponse = response.newBuilder()
+                                      .removeHeader("x-frame-options")
+                                      .removeHeader("frame-options")
+                                      .removeHeader("content-security-policy")
+                                      .build();
+                                      
+                              Map<String, String> headers = new HashMap<>();
+                              for (String name : modResponse.headers().names()) {
+                                  headers.put(name, modResponse.header(name));
+                              }
+                              
+                              return new WebResourceResponse(
+                                      modResponse.header("Content-Type", "text/html"),
+                                      modResponse.header("Content-Encoding", "utf-8"),
+                                      modResponse.code(),
+                                      modResponse.message(),
+                                      headers,
+                                      modResponse.body().byteStream()
+                              );
+                          } catch (Exception e) {
+                              return null;
+                          }
+                      }
+                  });
+                  
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+          }
+          EOF
+
+      - name: Generate index.html (With Credit)
+        run: |
+          cat << 'EOF' > app/src/main/assets/index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <style>
+                  body { margin: 0; padding: 0; font-family: sans-serif; background: #1e1e2f; }
+                  .credit { text-align: center; padding: 15px; color: #f7b801; font-weight: bold; font-size: 18px; }
+                  iframe { width: 100%; height: calc(100vh - 50px); border: none; background: #fff; }
+              </style>
+          </head>
+          <body>
+              <div class="credit">Created by Muhammad Taqi</div>
+              <iframe src="https://duck.ai/" title="Duck.ai"></iframe>
+          </body>
+          </html>
+          EOF
+
+      - name: Build APK
+        run: |
+          gradle wrapper --gradle-version 8.2
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DuckAI-WebView-APK
+          name: DuckAI-APK
           path: app/build/outputs/apk/debug/app-debug.apk
