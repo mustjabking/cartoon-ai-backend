@@ -17,8 +17,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
 
       - name: Create Project Directories
         run: |
@@ -36,6 +38,7 @@ jobs:
               }
           }
           dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
@@ -135,7 +138,7 @@ jobs:
                               Request okRequest = new Request.Builder().url(request.getUrl().toString()).build();
                               Response response = client.newCall(okRequest).execute();
                               
-                              // X-Frame-Options ko remove karna taake iframe chale
+                              // X-Frame-Options aur CSP ko remove karna taake iframe load ho sake
                               Response modResponse = response.newBuilder()
                                       .removeHeader("x-frame-options")
                                       .removeHeader("frame-options")
